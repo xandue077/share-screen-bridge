@@ -1,0 +1,29 @@
+{
+  "name": "share-screen-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Node.js bridge for the account share-screen panel: Discord voice streaming, movie playback, and search.",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "@discordjs/voice": "^0.17.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "@lng2004/node-datachannel": "0.32.0-20260202",
+    "@snazzah/davey": "^0.1.12",
+    "debug-level": "^4.1.1",
+    "discord.js-selfbot-v13": "^3.7.1",
+    "fluent-ffmpeg-simplified": "^0.1.0",
+    "libsodium-wrappers": "^0.7.15",
+    "node-av": "^6.1.1",
+    "p-debounce": "^5.1.0",
+    "sharp": "^0.35.3",
+    "zeromq": "^6.5.0"
+  },
+  "engines": {
+    "node": ">=22.4.0"
+  }
+}
