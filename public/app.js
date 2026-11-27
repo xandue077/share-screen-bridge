@@ -626,7 +626,7 @@
       })
       .then(function () {
         $("login-btn").disabled = false;
-        setText($("login-label"), "Sign in as bot");
+        setText($("login-label"), "Sign in as user");
       });
   }
 

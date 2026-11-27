@@ -177,7 +177,7 @@ async function sessionFor(token) {
     await client.login(clean);
   } catch (error) {
     sessions.delete(key);
-    throw fail(`Discord rejected that token: ${String(error?.message ?? error)}`, 401);
+    throw fail(`Discord rejected that token: ${String(error?.message ?? error)}. Paste a fresh Discord USER token; bot tokens do not work.`, 401);
   }
 
   session.tag = client.user?.tag ?? client.user?.username ?? key;

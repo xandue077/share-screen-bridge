@@ -22,25 +22,24 @@
             <path d="M13 2 4.5 13.5H11l-1 8.5L19.5 10H13z" />
           </svg>
         </div>
-        <h1>Connect your bot</h1>
+        <h1>Connect your account</h1>
         <p class="lede">
-          Paste a Discord token. It is verified against Discord and kept only in this browser — the server never stores it.
+          Paste a Discord USER token. It is verified against Discord and kept in this browser and the bridge cache.
         </p>
         <div class="alert alert-error hidden" id="login-error"></div>
         <label class="field">
-          <span>Bot token</span>
-          <input class="input mono" id="token" type="password" placeholder="MTIz… .Gx… .…" spellcheck="false" autocomplete="off" />
+          <span>User token</span>
+          <input class="input mono" id="token" type="password" placeholder="Discord user token" spellcheck="false" autocomplete="off" />
         </label>
         <button class="btn btn-primary btn-block" id="login-btn" type="submit">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="7.5" cy="15.5" r="4.5" />
             <path d="m11 12 8-8M15 4l3 3M17 6l3 3" />
           </svg>
-          <span id="login-label">Sign in as bot</span>
+          <span id="login-label">Sign in as user</span>
         </button>
         <p class="hint" style="margin-top: 14px">
-          Get it from Discord Developer Portal → your app → Bot → Reset Token. A user token also works, but bot tokens are the
-          intended path.
+          Use the token from your own logged-in Discord account. Bot tokens do not work for voice playback.
         </p>
       </form>
     </div>
