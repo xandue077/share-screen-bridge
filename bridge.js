@@ -1022,6 +1022,18 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (req.method === "GET" && url.pathname === "/debug-visitor") {
+      if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
+      try {
+        const page = await fetch("https://www.youtube.com/");
+        const html = await page.text();
+        const visitorData = html.match(/"VISITOR_DATA":"([^"]+)"/)?.[1] ?? "";
+        return send(res, 200, { ok: Boolean(visitorData), status: page.status, visitorData });
+      } catch (error) {
+        return send(res, 502, { ok: false, error: String(error?.message ?? error).slice(0, 500) });
+      }
+    }
+
     if (req.method === "GET" && url.pathname === "/debug-youtube") {
       if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
       const videoUrl = (url.searchParams.get("url") ?? "").trim();
