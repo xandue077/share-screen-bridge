@@ -334,6 +334,7 @@ async function resolveYouTube(input) {
         YTDLP_BIN,
         [
           "--no-playlist",
+          ...(process.env.YOUTUBE_VERBOSE === "1" ? ["--verbose"] : []),
           "--format",
           format,
           "--ffmpeg-location",
