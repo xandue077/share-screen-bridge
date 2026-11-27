@@ -931,6 +931,31 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
+    if (req.method === "GET" && url.pathname === "/debug-fetch") {
+      if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
+      const target = new URL(url.searchParams.get("url") ?? "");
+      if (target.hostname !== "kisskh.do") return send(res, 400, { ok: false, error: "Bad target." });
+      const candidates = [
+        target.toString(),
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`,
+        `https://corsproxy.io/?url=${encodeURIComponent(target)}`,
+        `https://api.cors.lol/?url=${encodeURIComponent(target)}`,
+      ];
+      const results = await Promise.all(
+        candidates.map(async (candidate) => {
+          try {
+            const response = await fetch(candidate, { signal: AbortSignal.timeout(15000) });
+            const body = await response.text();
+            return { url: candidate, status: response.status, body: body.slice(0, 160) };
+          } catch (error) {
+            return { url: candidate, error: error.cause?.code ?? error.message };
+          }
+        }),
+      );
+      return send(res, 200, { ok: true, results });
+    }
+
     if (req.method === "GET" && url.pathname === "/health") {
       return send(res, 200, {
         ok: true,
