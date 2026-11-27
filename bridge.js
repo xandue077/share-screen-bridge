@@ -956,7 +956,8 @@ const server = http.createServer(async (req, res) => {
       const target = new URL(url.searchParams.get("url") ?? "");
       if (
         !["kisskh.do", "enc-dec.app"].includes(target.hostname) &&
-        !target.hostname.endsWith(".cdnvideo11.shop")
+        !target.hostname.endsWith(".cdnvideo11.shop") &&
+        !target.hostname.endsWith(".verois3.site")
       )
         return send(res, 400, { ok: false, error: "Bad target." });
       const candidates = [
