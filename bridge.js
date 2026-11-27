@@ -1055,7 +1055,7 @@ const server = http.createServer(async (req, res) => {
       if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
       const target = new URL(url.searchParams.get("url") ?? "");
       if (
-        !["kisskh.do", "enc-dec.app"].includes(target.hostname) &&
+        !["kisskh.do", "enc-dec.app", "www.youtube.com"].includes(target.hostname) &&
         !target.hostname.endsWith(".cdnvideo11.shop") &&
         !target.hostname.endsWith(".verois3.site") &&
         !target.hostname.endsWith(".chocolatemoo53.com")
