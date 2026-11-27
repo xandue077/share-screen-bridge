@@ -995,7 +995,7 @@ const server = http.createServer(async (req, res) => {
         ({ stdout, stderr } = await execFileAsync(
           FFPROBE_BIN,
           [
-            "-v", "error", "-user_agent", "ffmpeg",
+            "-v", "debug", "-user_agent", "ffmpeg",
             ...(headers ? ["-headers", headers] : []),
             ...(media.inputOptions ?? []),
             "-show_entries", "stream=codec_type,codec_name,width,height",
