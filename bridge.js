@@ -356,21 +356,42 @@ function pickPipedUrl(data) {
   return candidates[0]?.url ?? null;
 }
 
+async function loadPipedInstances() {
+  const instances = new Set(PIPED_INSTANCES);
+  try {
+    const response = await fetch(
+      "https://raw.githubusercontent.com/TeamPiped/documentation/main/content/docs/public-instances/index.md",
+      { signal: AbortSignal.timeout(15_000) },
+    );
+    if (response.ok) {
+      const text = await response.text();
+      for (const match of text.matchAll(/https:\/\/[^\s|)]+/g)) {
+        const url = match[0].replace(/[),.;]+$/, "");
+        if (/^https:\/\/(piped|api\.)/i.test(url) && !url.includes("/registered/")) {
+          instances.add(url);
+        }
+      }
+    }
+  } catch {}
+  return [...instances].slice(0, 24);
+}
+
 async function resolveYouTubeViaPiped(input) {
   const match = String(input).match(/(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{11})/);
   const videoId = match?.[1];
   if (!videoId) return null;
-  for (const instance of PIPED_INSTANCES) {
-    try {
+  const instances = await loadPipedInstances();
+  const results = await Promise.allSettled(
+    instances.map(async (instance) => {
       const response = await fetch(`${instance}/streams/${videoId}`, {
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(15_000),
       });
-      if (!response.ok) continue;
-      const mediaUrl = pickPipedUrl(await response.json());
-      if (mediaUrl) return mediaUrl;
-    } catch {
-      continue;
-    }
+      if (!response.ok) return null;
+      return pickPipedUrl(await response.json());
+    }),
+  );
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) return result.value;
   }
   return null;
 }
