@@ -934,7 +934,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/debug-fetch") {
       if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
       const target = new URL(url.searchParams.get("url") ?? "");
-      if (target.hostname !== "kisskh.do") return send(res, 400, { ok: false, error: "Bad target." });
+      if (!["kisskh.do", "enc-dec.app"].includes(target.hostname))
+        return send(res, 400, { ok: false, error: "Bad target." });
       const candidates = [
         target.toString(),
         `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
