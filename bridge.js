@@ -759,23 +759,31 @@ async function probe(title) {
   const headers = Object.entries(media.headers)
     .map(([name, value]) => `${name}: ${value}\r\n`)
     .join("");
-  const { stdout } = await execFileAsync(
-    FFPROBE_BIN,
-    [
-      "-v",
-      "error",
-      "-user_agent",
-      "ffmpeg",
-      ...(headers ? ["-headers", headers] : []),
-      ...media.inputOptions,
-      "-show_entries",
-      "stream=codec_type,codec_name,width,height",
-      "-of",
-      "json",
-      media.mediaUrl,
-    ],
-    { timeout: 60_000, maxBuffer: 8 * 1024 * 1024 },
-  );
+  let stdout = "";
+  let stderr = "";
+  try {
+    ({ stdout, stderr } = await execFileAsync(
+      FFPROBE_BIN,
+      [
+        "-v",
+        "error",
+        "-user_agent",
+        "ffmpeg",
+        ...(headers ? ["-headers", headers] : []),
+        ...media.inputOptions,
+        "-show_entries",
+        "stream=codec_type,codec_name,width,height",
+        "-of",
+        "json",
+        media.mediaUrl,
+      ],
+      { timeout: 60_000, maxBuffer: 8 * 1024 * 1024 },
+    ));
+  } catch (error) {
+    stderr = String(error?.stderr ?? error?.message ?? "");
+    stdout = String(error?.stdout ?? "");
+  }
+  if (!stdout.trim()) throw fail(`ffprobe failed: ${stderr.slice(0, 300)}`, 502);
   return { label: media.label, streams: JSON.parse(stdout).streams ?? [] };
 }
 
