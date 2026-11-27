@@ -26,8 +26,20 @@ const SECRET = process.env.BOT_BRIDGE_SECRET ?? readSecret();
 const FFMPEG_DIR = process.env.FFMPEG_DIR ?? path.join(ROOT, "bin");
 // prepareStream spawns bare `ffmpeg`, so the bundled build has to be on PATH.
 process.env.PATH = `${FFMPEG_DIR}:${process.env.PATH ?? ""}`;
+const FFMPEG_BIN = process.env.FFMPEG_BIN ?? path.join(FFMPEG_DIR, "ffmpeg");
 const YTDLP_BIN = process.env.YTDLP_BIN ?? path.join(FFMPEG_DIR, "yt-dlp");
 const FFPROBE_BIN = process.env.FFPROBE_BIN ?? path.join(FFMPEG_DIR, "ffprobe");
+
+let KISSKH_INPUT_OPTIONS = [];
+try {
+  const help = await execFileAsync(FFMPEG_BIN, ["-hide_banner", "-h", "full"], {
+    maxBuffer: 16 * 1024 * 1024,
+    timeout: 15_000,
+  });
+  if (help.stdout.includes("-extension_picky")) KISSKH_INPUT_OPTIONS = ["-extension_picky", "false"];
+} catch {
+  KISSKH_INPUT_OPTIONS = [];
+}
 
 const IDLE_LEAVE_MS = 120_000;
 const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
@@ -353,7 +365,7 @@ async function resolveKisskh(title) {
   return {
     mediaUrl: movie.url,
     headers: movie.headers ?? {},
-    inputOptions: movie.inputOptions ?? [],
+    inputOptions: movie.provider === "kisskh" ? KISSKH_INPUT_OPTIONS : (movie.inputOptions ?? []),
     subtitlePath,
     label: `${movie.title}${movie.year ? ` (${movie.year})` : ""}`,
   };
