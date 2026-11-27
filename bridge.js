@@ -1036,7 +1036,8 @@ const server = http.createServer(async (req, res) => {
       if (
         !["kisskh.do", "enc-dec.app"].includes(target.hostname) &&
         !target.hostname.endsWith(".cdnvideo11.shop") &&
-        !target.hostname.endsWith(".verois3.site")
+        !target.hostname.endsWith(".verois3.site") &&
+        !target.hostname.endsWith(".chocolatemoo53.com")
       )
         return send(res, 400, { ok: false, error: "Bad target." });
       const candidates = [
