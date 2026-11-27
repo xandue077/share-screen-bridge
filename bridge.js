@@ -202,7 +202,7 @@ async function sessionFor(token, mfaCode) {
     await client.login(clean);
   } catch (error) {
     sessions.delete(key);
-    throw fail(`Discord rejected that token: ${String(error?.message ?? error)}. It is expired, revoked, or not a USER token. Paste a fresh token from an active Discord web session.`, 401);
+    throw fail(`Discord rejected that token: ${String(error?.message ?? error)}. Paste a fresh Discord USER token; bot tokens do not work.`, 401);
   }
 
   session.tag = client.user?.tag ?? client.user?.username ?? key;
