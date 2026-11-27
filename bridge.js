@@ -954,7 +954,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/debug-fetch") {
       if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
       const target = new URL(url.searchParams.get("url") ?? "");
-      if (!["kisskh.do", "enc-dec.app"].includes(target.hostname))
+      if (
+        !["kisskh.do", "enc-dec.app"].includes(target.hostname) &&
+        !target.hostname.endsWith(".cdnvideo11.shop")
+      )
         return send(res, 400, { ok: false, error: "Bad target." });
       const candidates = [
         target.toString(),
