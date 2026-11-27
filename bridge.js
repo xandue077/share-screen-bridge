@@ -328,7 +328,7 @@ async function resolveYouTube(input) {
   const format =
     "18/best[height<=720][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]";
   let lastError = null;
-  for (const playerClient of ["android", "tv", "ios", "web_safari"]) {
+  for (const playerClient of ["android_vr", "android", "tv", "ios", "web_safari"]) {
     try {
       const { stdout } = await execFileAsync(
         YTDLP_BIN,
