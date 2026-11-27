@@ -1016,6 +1016,19 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (req.method === "GET" && url.pathname === "/debug-youtube") {
+      if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
+      const videoUrl = (url.searchParams.get("url") ?? "").trim();
+      if (!/^https:\/\/(www\.)?(youtube\.com\/watch|youtu\.be\/)/.test(videoUrl))
+        return send(res, 400, { ok: false, error: "Bad YouTube URL." });
+      try {
+        const mediaUrl = await resolveYouTube(videoUrl);
+        return send(res, 200, { ok: true, mediaUrl: mediaUrl.slice(0, 300) });
+      } catch (error) {
+        return send(res, 502, { ok: false, error: String(error?.message ?? error).slice(0, 500) });
+      }
+    }
+
     if (req.method === "GET" && url.pathname === "/health") {
       return send(res, 200, {
         ok: true,
