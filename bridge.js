@@ -1,7 +1,7 @@
 import http from "node:http";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -21,6 +21,7 @@ const movies = await import(pathToFileURL(path.join(DVSP_DIR, "movies.js")).href
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? "0.0.0.0";
+const LOCAL_ORIGIN = `http://127.0.0.1:${PORT}`;
 const SECRET = process.env.BOT_BRIDGE_SECRET ?? readSecret();
 
 const FFMPEG_DIR = process.env.FFMPEG_DIR ?? path.join(ROOT, "bin");
@@ -396,22 +397,42 @@ async function resolveYouTubeViaPiped(input) {
   return null;
 }
 
-async function resolveYouTubeViaInvidious(input) {
-  const match = String(input).match(/(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{11})/);
-  const videoId = match?.[1];
-  if (!videoId) return null;
+const YT_STREAM_CACHE = new Map();
+
+function pickInvidiousStreams(data) {
+  const formats = Array.isArray(data?.adaptiveFormats) ? data.adaptiveFormats : [];
+  const videoFormats = formats
+    .filter((format) => format?.url && /^video\//i.test(String(format.type ?? "")))
+    .sort((left, right) => {
+      const height = (format) => Number(format.qualityLabel?.match(/\d+/)?.[0]) || 9999;
+      const rank = (value) => (value >= 360 && value <= 720 ? 0 : value < 360 ? 1 : 2);
+      return rank(height(left)) - rank(height(right)) || height(left) - height(right);
+    });
+  const video =
+    videoFormats.find((format) => /video\/mp4/i.test(String(format.type ?? ""))) ??
+    videoFormats[0];
+  const audio = formats.find(
+    (format) => format?.url && /^audio\/(mp4|webm)/i.test(String(format.type ?? "")),
+  );
+  return video && audio ? { video, audio } : null;
+}
+
+async function loadInvidiousStreams(videoId) {
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
-      const response = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        signal: AbortSignal.timeout(20_000),
-      });
+      const response = await fetch(
+        `${instance}/api/v1/videos/${videoId}?local=true`,
+        { signal: AbortSignal.timeout(20_000) },
+      );
       if (!response.ok) continue;
       const data = await response.json();
-      const progressive = (Array.isArray(data?.formatStreams) ? data.formatStreams : [])
-        .filter((stream) => stream?.url && /video\/mp4/i.test(String(stream.type ?? "")))
-        .sort((left, right) => (Number(right.qualityLabel?.match(/\d+/)?.[0]) || 0) - (Number(left.qualityLabel?.match(/\d+/)?.[0]) || 0));
-      if (progressive[0]?.url) return progressive[0].url;
-      if (data?.hlsUrl) return data.hlsUrl;
+      const picked = pickInvidiousStreams(data);
+      if (!picked) continue;
+      return {
+        ...picked,
+        duration: Number(data.lengthSeconds) || 0,
+        instance,
+      };
     } catch {
       continue;
     }
@@ -419,11 +440,24 @@ async function resolveYouTubeViaInvidious(input) {
   return null;
 }
 
+async function resolveYouTubeViaInvidious(input) {
+  const match = String(input).match(/(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{11})/);
+  const videoId = match?.[1];
+  if (!videoId) return null;
+  if (YT_STREAM_CACHE.has(videoId)) {
+    return `${LOCAL_ORIGIN}/ytstream?id=${encodeURIComponent(videoId)}`;
+  }
+  const streams = await loadInvidiousStreams(videoId);
+  if (!streams) return null;
+  YT_STREAM_CACHE.set(videoId, streams);
+  return `${LOCAL_ORIGIN}/ytstream?id=${encodeURIComponent(videoId)}`;
+}
+
 async function resolveYouTube(input) {
-  const pipedUrl = await resolveYouTubeViaPiped(input);
-  if (pipedUrl) return pipedUrl;
   const invidiousUrl = await resolveYouTubeViaInvidious(input);
   if (invidiousUrl) return invidiousUrl;
+  const pipedUrl = await resolveYouTubeViaPiped(input);
+  if (pipedUrl) return pipedUrl;
 
   const format =
     "18/best[height<=720][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]";
@@ -547,6 +581,10 @@ async function hlsDuration(media, depth = 0) {
 async function durationOf(entry) {
   const media = entry?.media;
   if (!media) return 0;
+  if (Number(media.duration) > 0) {
+    entry.duration = Math.round(Number(media.duration));
+    return entry.duration;
+  }
   const headers = Object.entries(media.headers ?? {})
     .map(([name, value]) => `${name}: ${value}\r\n`)
     .join("");
@@ -754,6 +792,9 @@ async function play(payload) {
           : {
               mediaUrl: await resolveYouTube(url),
               headers: {},
+              duration: YT_STREAM_CACHE.get(
+                String(url).match(/(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{11})/)?.[1] ?? "",
+              )?.duration ?? 0,
               inputOptions: [],
               subtitlePath: null,
               label: String(payload.title ?? url),
@@ -1049,6 +1090,72 @@ const server = http.createServer(async (req, res) => {
         "Access-Control-Max-Age": "86400",
       });
       return res.end();
+    }
+
+    if (req.method === "GET" && url.pathname === "/ytstream") {
+      if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
+      const videoId = (url.searchParams.get("id") ?? "").trim();
+      if (!/^[\w-]{11}$/.test(videoId))
+        return send(res, 400, { ok: false, error: "Bad video id." });
+      const streams =
+        YT_STREAM_CACHE.get(videoId) ?? (await loadInvidiousStreams(videoId));
+      if (!streams)
+        return send(res, 502, { ok: false, error: "No playable YouTube streams." });
+      YT_STREAM_CACHE.set(videoId, streams);
+      const refererHost = new URL(streams.instance).host;
+      const inputHeaders = `Referer: https://${refererHost}/\r\nUser-Agent: ffmpeg\r\n`;
+      const child = spawn(
+        FFMPEG_BIN,
+        [
+          "-y",
+          "-v",
+          "error",
+          "-re",
+          "-headers",
+          inputHeaders,
+          "-i",
+          streams.video.url,
+          "-re",
+          "-headers",
+          inputHeaders,
+          "-i",
+          streams.audio.url,
+          "-map",
+          "0:v:0",
+          "-map",
+          "1:a:0",
+          "-c",
+          "copy",
+          "-f",
+          "matroska",
+          "pipe:1",
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      res.writeHead(200, {
+        "Content-Type": "video/x-matroska",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+      });
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr = (stderr + chunk.toString()).slice(-8192);
+      });
+      child.stdout.on("data", (chunk) => {
+        if (!res.write(chunk)) child.stdout.pause();
+      });
+      child.stdout.on("end", () => res.end());
+      res.on("drain", () => child.stdout.resume());
+      req.on("close", () => child.kill("SIGTERM"));
+      child.on("error", (error) => {
+        if (!res.headersSent) send(res, 502, { ok: false, error: error.message });
+        else res.end();
+      });
+      child.on("close", (code) => {
+        if (code && stderr) console.error(`ytstream ${videoId} -> ${code}: ${stderr}`);
+        if (!res.writableEnded) res.end();
+      });
+      return;
     }
 
     if (req.method === "GET" && url.pathname === "/debug-fetch") {
