@@ -150,16 +150,34 @@ function challengeSolver(session) {
   };
 }
 
-async function sessionFor(token) {
+async function exchangeMfaTicket(ticket, code) {
+  const otp = String(code ?? "").replace(/\D/g, "");
+  if (!/^\d{6}$/.test(otp)) {
+    throw fail("This is an MFA ticket. Enter the 6-digit Discord 2FA code.", 428);
+  }
+  const response = await fetch("https://discord.com/api/v9/auth/mfa/totp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ticket, code: otp }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.token) {
+    throw fail(`Discord rejected the 2FA code: ${data?.message ?? "invalid ticket or code"}`, 401);
+  }
+  return data.token;
+}
+
+async function sessionFor(token, mfaCode) {
   const raw = String(token ?? "");
   if (/^Bot\s+/i.test(raw)) {
     throw fail("That is a bot token. Paste the token from your own logged-in Discord account instead.", 401);
   }
-  const clean = raw.trim();
+  let clean = raw.trim();
   if (!clean) throw fail("Missing account token.", 401);
   if (/^MTI[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{6,}\.[a-zA-Z0-9_-]{20,}$/.test(clean)) {
     throw fail("That is a bot token. Use a Discord USER token from your own account.", 401);
   }
+  if (clean.startsWith("mfa.")) clean = await exchangeMfaTicket(clean, mfaCode);
 
   const key = createHash("sha256").update(clean).digest("hex").slice(0, 16);
   const existing = sessions.get(key);
@@ -234,9 +252,9 @@ function normalizeInvite(value) {
   return candidate;
 }
 
-async function joinInvite(token, invite, captchaKey) {
+async function joinInvite(token, invite, captchaKey, mfaCode) {
   const cleanInvite = normalizeInvite(invite);
-  const session = await sessionFor(token);
+  const session = await sessionFor(token, mfaCode);
   let joined;
   if (captchaKey) {
     const key = String(captchaKey);
@@ -798,7 +816,7 @@ async function startStream(entry) {
 // hard 100s ceiling on tunneled requests, so the HTTP call only starts the job and
 // the work continues in the background. Progress and errors show up on /health.
 async function play(payload) {
-  const session = await sessionFor(payload.token);
+  const session = await sessionFor(payload.token, payload.mfaCode);
   const { client, streamer } = session;
 
   const guildId = String(payload.guildId ?? "");
@@ -1359,9 +1377,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && url.pathname === "/verify") {
       const body = await readBody(req);
-      const session = await sessionFor(body.token);
+      const session = await sessionFor(body.token, body.mfaCode);
       return send(res, 200, {
         ok: true,
+        token: session.token,
         account: {
           id: session.client.user?.id ?? "",
           username: session.client.user?.username ?? session.tag,
@@ -1374,10 +1393,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && url.pathname === "/channels") {
       const body = await readBody(req);
-      const session = await sessionFor(body.token);
+      const session = await sessionFor(body.token, body.mfaCode);
       const groups = await listVoiceChannels(session.token);
       return send(res, 200, {
         ok: true,
+        token: session.token,
         account: {
           id: session.client.user?.id ?? "",
           username: session.client.user?.username ?? session.tag,
@@ -1396,7 +1416,7 @@ const server = http.createServer(async (req, res) => {
       (url.pathname === "/join" || url.pathname === "/invite-join")
     ) {
       const body = await readBody(req);
-      const result = await joinInvite(body.token, body.invite, body.captchaKey);
+      const result = await joinInvite(body.token, body.invite, body.captchaKey, body.mfaCode);
       return send(res, 200, { ok: true, ...result });
     }
 

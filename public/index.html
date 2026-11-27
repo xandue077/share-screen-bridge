@@ -31,6 +31,10 @@
           <span>User token</span>
           <input class="input mono" id="token" type="password" placeholder="Discord user token" spellcheck="false" autocomplete="off" />
         </label>
+        <label class="field">
+          <span>2FA code (only for mfa. tokens)</span>
+          <input class="input mono" id="mfa-code" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" />
+        </label>
         <button class="btn btn-primary btn-block" id="login-btn" type="submit">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="7.5" cy="15.5" r="4.5" />

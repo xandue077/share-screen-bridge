@@ -146,11 +146,11 @@
     });
   }
 
-  function bridgeLogin(token) {
+  function bridgeLogin(token, mfaCode) {
     return directBridge("/channels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: token }),
+      body: JSON.stringify({ token: token, mfaCode: mfaCode || "" }),
     }).then(function (result) {
       if (result.status !== 200 || !result.data.ok) {
         return {
@@ -160,7 +160,12 @@
       }
       return {
         status: 200,
-        data: { ok: true, account: result.data.account, groups: result.data.groups || [] },
+        data: {
+          ok: true,
+          token: result.data.token || token,
+          account: result.data.account,
+          groups: result.data.groups || [],
+        },
       };
     });
   }
@@ -595,19 +600,23 @@
     hide($("login-error"));
     $("login-btn").disabled = true;
     setText($("login-label"), "Connecting…");
+    var mfaCode = $("mfa-code") ? $("mfa-code").value.trim() : "";
     state.token = token;
     var request = BRIDGE
-      ? bridgeLogin(token)
+      ? bridgeLogin(token, mfaCode)
       : api("/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: token }),
+          body: JSON.stringify({ token: token, mfaCode: mfaCode }),
         });
     request
       .then(function (result) {
         if (result.status === 200 && result.data.ok) {
-          localStorage.setItem(TOKEN_KEY, token);
+          var savedToken = result.data.token || token;
+          localStorage.setItem(TOKEN_KEY, savedToken);
+          state.token = savedToken;
           $("token").value = "";
+          if ($("mfa-code")) $("mfa-code").value = "";
           if (result.data.groups) {
             state.groups = result.data.groups;
             signedIn(result.data.account);
