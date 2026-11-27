@@ -5,7 +5,7 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const execFileAsync = promisify(execFile);
 
@@ -63,8 +63,38 @@ function readSecret() {
 // One Discord client per account token. The panel forwards the token the user
 // signed in with, so playback runs as that account instead of a hardcoded one.
 const sessions = new Map();
+const TOKEN_CACHE = path.join(ROOT, ".tokens.json");
 let current = null;
 let idleTimer = null;
+
+function readTokenCache() {
+  try {
+    const tokens = JSON.parse(readFileSync(TOKEN_CACHE, "utf8"));
+    return Array.isArray(tokens) ? tokens.filter((token) => typeof token === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberToken(token) {
+  try {
+    const tokens = readTokenCache().filter((item) => item !== token);
+    tokens.push(token);
+    writeFileSync(TOKEN_CACHE, JSON.stringify(tokens.slice(-4)), { mode: 0o600 });
+  } catch {
+    /* cache is best-effort */
+  }
+}
+
+async function restoreSessions() {
+  for (const token of readTokenCache().slice(-4)) {
+    try {
+      await sessionFor(token);
+    } catch {
+      /* stale token */
+    }
+  }
+}
 
 function isTrackError(error) {
   return /Track is not open|libdatachannel|sendMessageBinary|daveSession/i.test(
@@ -150,6 +180,7 @@ async function sessionFor(token) {
   }
 
   session.tag = client.user?.tag ?? client.user?.username ?? key;
+  rememberToken(clean);
   console.log(`session ready: ${session.tag} (${client.guilds.cache.size} guilds)`);
   return session;
 }
@@ -1390,7 +1421,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => console.log(`bridge listening on ${HOST}:${PORT} (video + audio)`));
+server.listen(PORT, HOST, () => {
+  console.log(`bridge listening on ${HOST}:${PORT} (video + audio)`);
+  void restoreSessions();
+});
 
 function shutdown() {
   stopCurrent();
