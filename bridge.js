@@ -957,6 +957,41 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, results });
     }
 
+    if (req.method === "GET" && url.pathname === "/debug-probe") {
+      if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
+      const title = (url.searchParams.get("title") ?? "").trim();
+      if (!title) return send(res, 400, { ok: false, error: "Missing title." });
+      const media = await resolveKisskh(title);
+      const headers = Object.entries(media.headers)
+        .map(([name, value]) => `${name}: ${value}\r\n`)
+        .join("");
+      let stdout = "";
+      let stderr = "";
+      try {
+        ({ stdout, stderr } = await execFileAsync(
+          FFPROBE_BIN,
+          [
+            "-v", "error", "-user_agent", "ffmpeg",
+            ...(headers ? ["-headers", headers] : []),
+            ...(media.inputOptions ?? []),
+            "-show_entries", "stream=codec_type,codec_name,width,height",
+            "-of", "json", media.mediaUrl,
+          ],
+          { timeout: 60_000, maxBuffer: 8 * 1024 * 1024 },
+        ));
+      } catch (error) {
+        stdout = String(error?.stdout ?? "");
+        stderr = String(error?.stderr ?? error?.message ?? "");
+      }
+      return send(res, 200, {
+        ok: true,
+        label: media.label,
+        mediaUrl: media.mediaUrl,
+        stdout: stdout.slice(0, 2000),
+        stderr: stderr.slice(0, 2000),
+      });
+    }
+
     if (req.method === "GET" && url.pathname === "/health") {
       return send(res, 200, {
         ok: true,
