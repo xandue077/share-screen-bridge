@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bot Panel — YouTube to voice</title>
+    <meta name="description" content="Sign in with a Discord token, find a YouTube video, send it to a voice channel." />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="boot" class="login-shell">
+      <div class="login-card" style="text-align: center">
+        <div class="spin" style="margin: 0 auto 14px"></div>
+        <p class="hint">Checking session…</p>
+      </div>
+    </div>
+
+    <div id="login" class="login-shell hidden">
+      <form class="login-card" id="login-form" autocomplete="off">
+        <div class="brand-mark">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2 4.5 13.5H11l-1 8.5L19.5 10H13z" />
+          </svg>
+        </div>
+        <h1>Connect your bot</h1>
+        <p class="lede">
+          Paste a Discord token. It is verified against Discord and kept only in this browser — the server never stores it.
+        </p>
+        <div class="alert alert-error hidden" id="login-error"></div>
+        <label class="field">
+          <span>Bot token</span>
+          <input class="input mono" id="token" type="password" placeholder="MTIz… .Gx… .…" spellcheck="false" autocomplete="off" />
+        </label>
+        <button class="btn btn-primary btn-block" id="login-btn" type="submit">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="7.5" cy="15.5" r="4.5" />
+            <path d="m11 12 8-8M15 4l3 3M17 6l3 3" />
+          </svg>
+          <span id="login-label">Sign in as bot</span>
+        </button>
+        <p class="hint" style="margin-top: 14px">
+          Get it from Discord Developer Portal → your app → Bot → Reset Token. A user token also works, but bot tokens are the
+          intended path.
+        </p>
+      </form>
+    </div>
+
+    <div id="app" class="hidden">
+      <header class="topbar">
+        <div class="wrap topbar-inner">
+          <div class="who">
+            <img class="avatar hidden" id="me-avatar" alt="" />
+            <span class="avatar avatar-fallback" id="me-fallback">?</span>
+            <div style="min-width: 0">
+              <div class="who-name" id="me-name">—</div>
+              <div class="who-sub"><span class="dot"></span><span id="me-sub">—</span></div>
+            </div>
+          </div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost" id="logout" type="button">Disconnect</button>
+        </div>
+      </header>
+
+      <main class="wrap main">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Voice target</div>
+              <p class="panel-sub">Every voice channel the account can reach, grouped by server.</p>
+            </div>
+          </div>
+          <div class="voice-selected" id="voice-selected">
+            <div>
+              <div class="voice-selected-label">Selected channel</div>
+              <div class="voice-selected-name" id="voice-current">Loading voice channels…</div>
+            </div>
+            <button class="btn btn-ghost" id="voice-change" type="button">Change</button>
+          </div>
+
+          <div class="voice-picker hidden" id="voice-picker">
+            <input class="input" id="voice-search" placeholder="Search server or channel name…" autocomplete="off" spellcheck="false" />
+            <div class="voice-list" id="voice-list"></div>
+          </div>
+
+          <p class="hint" id="voice-summary" style="margin-top: 10px"></p>
+          <p class="hint hidden" id="no-guilds" style="margin-top: 6px">
+            This account is in no server with a voice channel yet — invite the bot first.
+          </p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Find a video</div>
+              <p class="panel-sub">Paste a YouTube link, type a video name, or search kisskh for a movie or series.</p>
+            </div>
+            <span class="chip chip-link hidden" id="link-chip">Link detected — no list</span>
+          </div>
+
+          <div class="source-tabs" id="source-tabs" role="tablist">
+            <button class="source-tab active" type="button" data-source="youtube" role="tab">YouTube</button>
+            <button class="source-tab" type="button" data-source="kisskh" role="tab">Movies &amp; series</button>
+          </div>
+
+          <form class="search-row" id="search-form">
+            <input class="input" id="query" placeholder="https://youtube.com/watch?v=…  or  lofi hip hop" spellcheck="false" />
+            <button class="btn btn-primary" id="search-btn" type="submit">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <span id="search-label">Search</span>
+            </button>
+          </form>
+
+          <div class="alert alert-error hidden" id="search-error" style="margin-top: 14px; margin-bottom: 0"></div>
+          <div class="results hidden" id="skeletons">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+          </div>
+          <div class="results hidden" id="results"></div>
+          <p class="hint hidden" id="results-hint" style="margin-top: 12px">
+            Tap a result to choose it. Only one pick is active at a time.
+          </p>
+          <div class="empty hidden" id="no-results" style="margin-top: 14px">No results. Try a different name.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Selected</div>
+              <p class="panel-sub">One video, sent to the bot.</p>
+            </div>
+          </div>
+
+          <div id="selected" class="hidden">
+            <div class="now">
+              <img class="thumb" id="sel-thumb" alt="" />
+              <div class="now-body">
+                <p class="now-title" id="sel-title"></p>
+                <div class="result-meta">
+                  <span id="sel-channel"></span>
+                  <span class="pill hidden" id="sel-duration"></span>
+                  <a id="sel-link" target="_blank" rel="noreferrer" style="color: var(--cyan)">open on YouTube</a>
+                </div>
+              </div>
+              <button class="btn btn-primary" id="play" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z" /></svg>
+                <span id="play-label">Play in voice</span>
+              </button>
+            </div>
+            <p class="hint hidden" id="need-target" style="margin-top: 12px">
+              Choose a server and voice channel above to enable playback.
+            </p>
+            <div class="alert hidden" id="play-msg" style="margin-top: 14px; margin-bottom: 0"></div>
+          </div>
+
+          <div class="empty" id="no-selection">Nothing selected yet — search above or paste a link.</div>
+        </section>
+
+        <section class="panel hidden" id="player">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Now playing</div>
+              <p class="panel-sub">Controls affect the live voice stream.</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <span class="chip" id="player-state">connecting…</span>
+              <button class="btn btn-ghost" id="player-stop" type="button">Stop</button>
+            </div>
+          </div>
+
+          <p class="now-title" id="player-title" style="margin-bottom: 14px"></p>
+
+          <div class="player-row">
+            <button class="btn btn-primary player-toggle" id="player-toggle" type="button">Pause</button>
+            <span class="time" id="player-cur">0:00</span>
+            <input class="range" id="player-seek" type="range" min="0" max="100" value="0" aria-label="Seek" />
+            <span class="time" id="player-dur">0:00</span>
+          </div>
+
+          <div class="player-row">
+            <span class="time">Volume</span>
+            <input class="range" id="player-volume" type="range" min="0" max="200" value="100" aria-label="Volume" />
+            <span class="time" id="player-vol-label">100%</span>
+          </div>
+
+          <p class="hint hidden" id="player-error" style="margin-top: 12px"></p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Queue</div>
+              <p class="panel-sub" id="queue-sub">Empty.</p>
+            </div>
+            <button class="btn btn-ghost hidden" id="queue-clear" type="button">Clear</button>
+          </div>
+          <div class="queue hidden" id="queue"></div>
+          <div class="empty" id="queue-empty">Picks land here in order.</div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./config.js?v=20261117h"></script>
+    <script src="./app.js?v=20261117h"></script>
+  </body>
+</html>

@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 const execFileAsync = promisify(execFile);
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = path.join(ROOT, "public");
 const DVSP_DIR = process.env.DVSP_DIR ?? ROOT;
 const requireDvsp = createRequire(path.join(ROOT, "package.json"));
 const { Client } = requireDvsp("discord.js-selfbot-v13");
@@ -846,6 +847,40 @@ function send(res, status, body) {
   res.end(payload);
 }
 
+const STATIC_FILES = new Map([
+  ["/", "index.html"],
+  ["/index.html", "index.html"],
+  ["/app.js", "app.js"],
+  ["/styles.css", "styles.css"],
+  ["/config.js", "config.js"],
+]);
+
+const STATIC_TYPES = new Map([
+  ["index.html", "text/html; charset=utf-8"],
+  ["app.js", "text/javascript; charset=utf-8"],
+  ["styles.css", "text/css; charset=utf-8"],
+  ["config.js", "text/javascript; charset=utf-8"],
+]);
+
+function serveStatic(res, pathname) {
+  const file = STATIC_FILES.get(pathname);
+  if (!file) return false;
+  let body;
+  try {
+    body = readFileSync(path.join(PUBLIC_DIR, file));
+  } catch {
+    return false;
+  }
+  res.writeHead(200, {
+    "Content-Type": STATIC_TYPES.get(file) ?? "application/octet-stream",
+    "Content-Length": body.length,
+    "Cache-Control": "no-cache",
+    "Access-Control-Allow-Origin": "*",
+  });
+  res.end(body);
+  return true;
+}
+
 async function readBody(req) {
   const chunks = [];
   let size = 0;
@@ -1002,6 +1037,8 @@ const server = http.createServer(async (req, res) => {
       stopCurrent();
       return send(res, 200, { ok: true });
     }
+
+    if (req.method === "GET" && serveStatic(res, url.pathname)) return;
 
     return send(res, 404, { ok: false, error: "Not found." });
   } catch (error) {
