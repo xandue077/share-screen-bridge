@@ -339,7 +339,13 @@ async function resolveYouTube(input) {
           "--ffmpeg-location",
           FFMPEG_DIR,
           "--extractor-args",
-          `youtube:player_client=${playerClient};player_skip=webpage,configs,js`,
+          [
+            `youtube:player_client=${playerClient}`,
+            "player_skip=webpage,configs,js",
+            process.env.YOUTUBE_VISITOR_DATA
+              ? `visitor_data=${process.env.YOUTUBE_VISITOR_DATA}`
+              : null,
+          ].filter(Boolean).join(";"),
           "--get-url",
           input,
         ],
