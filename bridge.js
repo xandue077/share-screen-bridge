@@ -324,7 +324,55 @@ async function listVoiceChannels(token) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+const PIPED_INSTANCES = [
+  "https://api.piped.private.coffee",
+  "https://pipedapi.adminforge.de",
+  "https://pipedapi.kavin.rocks",
+  "https://pipedapi.leptons.xyz",
+];
+
+function pickPipedUrl(data) {
+  const streams = Array.isArray(data?.videoStreams) ? data.videoStreams : [];
+  const candidates = streams
+    .filter((stream) =>
+      stream?.url &&
+      stream.videoOnly === false &&
+      /video\/mp4/i.test(String(stream.mimeType ?? "")) &&
+      !/hls/i.test(String(stream.format ?? ""))
+    )
+    .map((stream) => ({
+      url: stream.url,
+      score:
+        (String(stream.format ?? "").toUpperCase() === "MPEG_4" ? 1000 : 0) +
+        (Number.parseInt(String(stream.quality ?? ""), 10) || 0),
+    }))
+    .sort((left, right) => right.score - left.score);
+  return candidates[0]?.url ?? null;
+}
+
+async function resolveYouTubeViaPiped(input) {
+  const match = String(input).match(/(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{11})/);
+  const videoId = match?.[1];
+  if (!videoId) return null;
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const response = await fetch(`${instance}/streams/${videoId}`, {
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) continue;
+      const mediaUrl = pickPipedUrl(await response.json());
+      if (mediaUrl) return mediaUrl;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 async function resolveYouTube(input) {
+  const pipedUrl = await resolveYouTubeViaPiped(input);
+  if (pipedUrl) return pipedUrl;
+
   const format =
     "18/best[height<=720][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]";
   let lastError = null;
@@ -334,19 +382,12 @@ async function resolveYouTube(input) {
         YTDLP_BIN,
         [
           "--no-playlist",
-          ...(process.env.YOUTUBE_VERBOSE === "1" ? ["--verbose"] : []),
           "--format",
           format,
           "--ffmpeg-location",
           FFMPEG_DIR,
           "--extractor-args",
-          [
-            `youtube:player_client=${playerClient}`,
-            "player_skip=webpage,configs,js",
-            process.env.YOUTUBE_VISITOR_DATA
-              ? `visitor_data=${process.env.YOUTUBE_VISITOR_DATA}`
-              : null,
-          ].filter(Boolean).join(";"),
+          `youtube:player_client=${playerClient}`,
           "--get-url",
           input,
         ],
