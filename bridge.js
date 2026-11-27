@@ -151,8 +151,15 @@ function challengeSolver(session) {
 }
 
 async function sessionFor(token) {
-  const clean = String(token ?? "").replace(/^Bot\s+/i, "").trim();
+  const raw = String(token ?? "");
+  if (/^Bot\s+/i.test(raw)) {
+    throw fail("That is a bot token. Paste the token from your own logged-in Discord account instead.", 401);
+  }
+  const clean = raw.trim();
   if (!clean) throw fail("Missing account token.", 401);
+  if (/^MTI[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{6,}\.[a-zA-Z0-9_-]{20,}$/.test(clean)) {
+    throw fail("That is a bot token. Use a Discord USER token from your own account.", 401);
+  }
 
   const key = createHash("sha256").update(clean).digest("hex").slice(0, 16);
   const existing = sessions.get(key);
