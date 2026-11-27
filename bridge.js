@@ -1145,6 +1145,23 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    if (req.method === "GET" && url.pathname === "/debug-resolvers") {
+      if (!authorized) return send(res, 401, { ok: false, error: "Bad bridge secret." });
+      const videoUrl = (url.searchParams.get("url") ?? "").trim();
+      if (!/^https:\/\/(www\.)?(youtube\.com\/watch|youtu\.be\/)/.test(videoUrl))
+        return send(res, 400, { ok: false, error: "Bad YouTube URL." });
+      const [piped, invidious] = await Promise.allSettled([
+        resolveYouTubeViaPiped(videoUrl),
+        resolveYouTubeViaInvidious(videoUrl),
+      ]);
+      return send(res, 200, {
+        ok: true,
+        instances: (await loadPipedInstances()).length,
+        piped: piped.status === "fulfilled" ? piped.value : null,
+        invidious: invidious.status === "fulfilled" ? invidious.value : null,
+      });
+    }
+
     if (req.method === "GET" && url.pathname === "/health") {
       return send(res, 200, {
         ok: true,
