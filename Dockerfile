@@ -13,10 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package.json ./
 RUN npm install \
   && mkdir -p /app/bin \
-  && cp "$(node -p "require('@ffmpeg-installer/ffmpeg').path")" /app/bin/ffmpeg \
-  && cp "$(node -p "require('@ffprobe-installer/ffprobe').path")" /app/bin/ffprobe \
+  && curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz -o /tmp/ffmpeg.tar.xz \
+  && tar -xJf /tmp/ffmpeg.tar.xz -C /app/bin --strip-components=2 \
+       ffmpeg-master-latest-linux64-gpl/bin/ffmpeg \
+       ffmpeg-master-latest-linux64-gpl/bin/ffprobe \
   && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /app/bin/yt-dlp \
-  && chmod +x /app/bin/ffmpeg /app/bin/ffprobe /app/bin/yt-dlp
+  && chmod +x /app/bin/ffmpeg /app/bin/ffprobe /app/bin/yt-dlp \
+  && rm -f /tmp/ffmpeg.tar.xz
 
 COPY . .
 
