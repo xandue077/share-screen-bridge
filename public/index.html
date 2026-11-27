@@ -42,6 +42,11 @@
           </svg>
           <span id="login-label">Sign in as user</span>
         </button>
+        <button class="btn btn-ghost btn-block" id="qr-btn" type="button">Sign in with Discord QR</button>
+        <div class="hidden" id="qr-box" style="text-align: center; margin-top: 14px">
+          <img id="qr-img" alt="Discord login QR code" style="width: 220px; height: 220px; border-radius: 12px; background: #fff; padding: 8px" />
+          <p class="hint" id="qr-status">Open Discord → User Settings → Scan QR Code.</p>
+        </div>
         <p class="hint" style="margin-top: 14px">
           Use the token from your own logged-in Discord account. Bot tokens do not work for voice playback.
         </p>

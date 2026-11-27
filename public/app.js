@@ -639,6 +639,75 @@
       });
   }
 
+  function startQrLogin() {
+    if (!BRIDGE) {
+      show($("login-error"));
+      setText($("login-error"), "QR sign-in needs the local bridge.");
+      return;
+    }
+    hide($("login-error"));
+    show($("qr-box"));
+    setText($("qr-status"), "Creating QR session…");
+    $("qr-btn").disabled = true;
+    directBridge("/qr-start", { method: "POST" })
+      .then(function (result) {
+        if (result.status !== 200 || !result.data.ok) {
+          throw new Error(result.data.error || "Could not create QR session.");
+        }
+        $("qr-img").src = result.data.qr;
+        setText($("qr-status"), "Scan with Discord → User Settings → Scan QR Code.");
+        return pollQrLogin(result.data.id, 0);
+      })
+      .then(function (result) {
+        if (result.status !== 200 || !result.data.ok) {
+          throw new Error(result.data.error || "QR sign-in failed.");
+        }
+        var token = result.data.token;
+        localStorage.setItem(TOKEN_KEY, token);
+        state.token = token;
+        return bridgeLogin(token).then(function (loginResult) {
+          if (loginResult.status === 200 && loginResult.data.ok) {
+            state.groups = loginResult.data.groups || [];
+            signedIn(loginResult.data.account);
+            setText($("qr-status"), "Signed in.");
+            hide($("qr-box"));
+            return;
+          }
+          throw new Error(loginResult.data.error || "Could not load channels.");
+        });
+      })
+      .catch(function (error) {
+        state.token = null;
+        setText($("qr-status"), String(error?.message ?? error));
+      })
+      .then(function () {
+        $("qr-btn").disabled = false;
+      });
+  }
+
+  function pollQrLogin(id, attempts) {
+    if (attempts > 60) {
+      return Promise.resolve({ status: 408, data: { ok: false, error: "QR session expired." } });
+    }
+    return directBridge("/qr-status?id=" + encodeURIComponent(id)).then(function (result) {
+      if (result.status !== 200 || !result.data.ok) return result;
+      var status = result.data.status;
+      if (status === "done") return result;
+      if (status === "error" || status === "cancelled" || status === "expired") {
+        return {
+          status: 400,
+          data: { ok: false, error: result.data.error || "QR session " + status + "." },
+        };
+      }
+      if (status === "scanned") setText($("qr-status"), "Scanned. Approve in Discord…");
+      return new Promise(function (resolve) {
+        setTimeout(resolve, 2000);
+      }).then(function () {
+        return pollQrLogin(id, attempts + 1);
+      });
+    });
+  }
+
   function search(event) {
     event.preventDefault();
     var query = $("query").value.trim();
@@ -860,6 +929,7 @@
       });
     }
     $("login-form").addEventListener("submit", login);
+    $("qr-btn").addEventListener("click", startQrLogin);
     $("search-form").addEventListener("submit", search);
     $("query").addEventListener("input", function () {
       if (LINK_RE.test($("query").value.trim())) show($("link-chip"));

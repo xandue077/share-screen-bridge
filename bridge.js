@@ -1,6 +1,6 @@
 import http from "node:http";
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { createRequire } from "node:module";
@@ -13,7 +13,8 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(ROOT, "public");
 const DVSP_DIR = process.env.DVSP_DIR ?? ROOT;
 const requireDvsp = createRequire(path.join(ROOT, "package.json"));
-const { Client } = requireDvsp("discord.js-selfbot-v13");
+const { Client, DiscordAuthWebsocket } = requireDvsp("discord.js-selfbot-v13");
+const QRCode = requireDvsp("qrcode");
 const { Streamer, Utils, prepareStream, playStream, Encoders } = await import(
   pathToFileURL(path.join(DVSP_DIR, "dist/index.js")).href
 );
@@ -63,6 +64,7 @@ function readSecret() {
 // One Discord client per account token. The panel forwards the token the user
 // signed in with, so playback runs as that account instead of a hardcoded one.
 const sessions = new Map();
+const qrAuth = new Map();
 const TOKEN_CACHE = path.join(ROOT, ".tokens.json");
 let current = null;
 let idleTimer = null;
@@ -1373,6 +1375,83 @@ const server = http.createServer(async (req, res) => {
       const query = (url.searchParams.get("q") ?? "").trim();
       if (!query) return send(res, 400, { ok: false, error: "Missing q." });
       return send(res, 200, { ok: true, items: await searchKisskh(query) });
+    }
+
+    if (req.method === "POST" && url.pathname === "/qr-start") {
+      const id = randomBytes(12).toString("hex");
+      const auth = new DiscordAuthWebsocket();
+      const state = {
+        id,
+        auth,
+        status: "pending",
+        token: null,
+        account: null,
+        user: null,
+        error: null,
+        expiresAt: Date.now() + 120_000,
+      };
+      qrAuth.set(id, state);
+      auth.on("pending", (user) => {
+        state.status = "scanned";
+        state.user = user ?? null;
+      });
+      auth.on("error", (error) => {
+        state.status = "error";
+        state.error = String(error?.message ?? error);
+      });
+      auth.on("cancel", () => {
+        state.status = "cancelled";
+      });
+      auth.on("finish", async (token) => {
+        state.status = "done";
+        state.token = token;
+        try {
+          const session = await sessionFor(token);
+          state.account = {
+            id: session.client.user?.id ?? "",
+            username: session.client.user?.username ?? session.tag,
+            globalName: session.client.user?.globalName ?? null,
+            avatar: session.client.user?.avatar ?? null,
+            isBot: Boolean(session.client.user?.bot),
+          };
+        } catch (error) {
+          state.error = String(error?.message ?? error);
+        }
+        auth.destroy();
+      });
+      await Promise.race([
+        new Promise((resolve, reject) => {
+          auth.once("ready", resolve);
+          auth.once("error", reject);
+          auth.connect().catch(reject);
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(fail("QR session timed out.", 504)), 10_000)),
+      ]);
+      const qr = await QRCode.toDataURL(auth.AuthURL, { margin: 1, width: 256 });
+      return send(res, 200, { ok: true, id, qr, url: auth.AuthURL });
+    }
+
+    if (req.method === "GET" && url.pathname === "/qr-status") {
+      const id = String(url.searchParams.get("id") ?? "");
+      const state = qrAuth.get(id);
+      if (!state) return send(res, 404, { ok: false, error: "Unknown QR session." });
+      if (Date.now() > state.expiresAt && state.status !== "done") {
+        qrAuth.delete(id);
+        try {
+          state.auth.destroy();
+        } catch {
+          /* already gone */
+        }
+        return send(res, 200, { ok: true, status: "expired" });
+      }
+      return send(res, 200, {
+        ok: true,
+        status: state.status,
+        token: state.token,
+        account: state.account,
+        user: state.user,
+        error: state.error,
+      });
     }
 
     if (req.method === "POST" && url.pathname === "/verify") {
