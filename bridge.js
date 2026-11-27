@@ -66,6 +66,7 @@ const sessions = new Map();
 const TOKEN_CACHE = path.join(ROOT, ".tokens.json");
 let current = null;
 let idleTimer = null;
+let failureTimer = null;
 
 function readTokenCache() {
   try {
@@ -541,15 +542,38 @@ function stopCurrent() {
     clearTimeout(idleTimer);
     idleTimer = null;
   }
+  if (failureTimer) {
+    clearTimeout(failureTimer);
+    failureTimer = null;
+  }
   const entry = current;
   current = null;
   if (!entry) return;
-  entry.controller.abort();
+  entry.controller?.abort();
   try {
     entry.streamer.leaveVoice();
   } catch {
     /* already gone */
   }
+}
+
+function failEntry(entry, error) {
+  if (current !== entry || entry.failed) return;
+  entry.failed = true;
+  entry.lastError = String(error?.message ?? error);
+  entry.media = null;
+  entry.label = `failed: ${entry.lastError}`;
+  entry.controller?.abort();
+  try {
+    entry.streamer.leaveVoice();
+  } catch {
+    /* already gone */
+  }
+  if (failureTimer) clearTimeout(failureTimer);
+  failureTimer = setTimeout(() => {
+    if (current === entry) current = null;
+    failureTimer = null;
+  }, 45_000);
 }
 
 function scheduleIdleLeave(streamer) {
@@ -739,20 +763,20 @@ async function startStream(entry) {
   });
   command.on("error", (error) => {
     console.error("ffmpeg:", error.message);
-    if (current === entry) stopCurrent();
+    failEntry(entry, error);
   });
   void promise.catch((error) => {
     if (!controller.signal.aborted) {
-      entry.lastError = String(error?.message ?? error);
-      console.error("ffmpeg failed:", entry.lastError);
+      console.error("ffmpeg failed:", String(error?.message ?? error));
+      failEntry(entry, error);
     }
   });
 
   void playStream(output, streamer, { type: "go-live" }, controller.signal)
     .catch((error) => {
       if (!controller.signal.aborted) {
-        entry.lastError = String(error?.message ?? error);
-        console.error("playStream failed:", entry.lastError);
+        console.error("playStream failed:", String(error?.message ?? error));
+        failEntry(entry, error);
       }
     })
     .finally(() => {
@@ -838,9 +862,8 @@ async function play(payload) {
       await startStream(entry);
     } catch (error) {
       if (current === entry) {
-        entry.lastError = String(error?.message ?? error);
-        console.error("play failed:", entry.lastError);
-        stopCurrent();
+        console.error("play failed:", String(error?.message ?? error));
+        failEntry(entry, error);
       }
     }
   })();
@@ -854,7 +877,7 @@ function streamStatus() {
     ok: true,
     playing: Boolean(entry),
     paused: Boolean(entry?.paused),
-    starting: Boolean(entry && !entry.media),
+    starting: Boolean(entry && !entry.media && !entry.failed),
     label: entry?.label || "",
     position: Math.floor(positionOf(entry)),
     duration: entry?.duration || 0,

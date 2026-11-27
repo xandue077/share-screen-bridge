@@ -728,7 +728,7 @@
         }
 
         state.playerPaused = Boolean(status.paused);
-        setText($("player-state"), status.paused ? "paused" : status.starting ? "resolving…" : "playing");
+        setText($("player-state"), status.lastError ? "failed" : status.paused ? "paused" : status.starting ? "resolving…" : "playing");
         setText($("player-title"), status.label || $("player-title").textContent);
         setText($("player-cur"), formatTime(status.position));
         setText($("player-dur"), status.duration ? formatTime(status.duration) : "--:--");
