@@ -45,11 +45,11 @@ try {
 const IDLE_LEAVE_MS = 120_000;
 const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 const STREAM_OPTS = {
-  width: Number(process.env.STREAM_WIDTH ?? 1280),
-  height: Number(process.env.STREAM_HEIGHT ?? 720),
-  fps: Number(process.env.STREAM_FPS ?? 60),
-  bitrateKbps: Number(process.env.STREAM_BITRATE ?? 4500),
-  maxBitrateKbps: Number(process.env.STREAM_MAX_BITRATE ?? 8000),
+  width: Number(process.env.STREAM_WIDTH ?? 640),
+  height: Number(process.env.STREAM_HEIGHT ?? 360),
+  fps: Number(process.env.STREAM_FPS ?? 30),
+  bitrateKbps: Number(process.env.STREAM_BITRATE ?? 1600),
+  maxBitrateKbps: Number(process.env.STREAM_MAX_BITRATE ?? 2500),
 };
 
 function readSecret() {
