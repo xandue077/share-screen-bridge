@@ -331,6 +331,12 @@ const PIPED_INSTANCES = [
   "https://pipedapi.leptons.xyz",
 ];
 
+const INVIDIOUS_INSTANCES = [
+  "https://yt.chocolatemoo53.com",
+  "https://inv.nadeko.net",
+  "https://invidious.tiekoetter.com",
+];
+
 function pickPipedUrl(data) {
   const streams = Array.isArray(data?.videoStreams) ? data.videoStreams : [];
   const candidates = streams
@@ -369,9 +375,34 @@ async function resolveYouTubeViaPiped(input) {
   return null;
 }
 
+async function resolveYouTubeViaInvidious(input) {
+  const match = String(input).match(/(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{11})/);
+  const videoId = match?.[1];
+  if (!videoId) return null;
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const response = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) continue;
+      const data = await response.json();
+      const progressive = (Array.isArray(data?.formatStreams) ? data.formatStreams : [])
+        .filter((stream) => stream?.url && /video\/mp4/i.test(String(stream.type ?? "")))
+        .sort((left, right) => (Number(right.qualityLabel?.match(/\d+/)?.[0]) || 0) - (Number(left.qualityLabel?.match(/\d+/)?.[0]) || 0));
+      if (progressive[0]?.url) return progressive[0].url;
+      if (data?.hlsUrl) return data.hlsUrl;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 async function resolveYouTube(input) {
   const pipedUrl = await resolveYouTubeViaPiped(input);
   if (pipedUrl) return pipedUrl;
+  const invidiousUrl = await resolveYouTubeViaInvidious(input);
+  if (invidiousUrl) return invidiousUrl;
 
   const format =
     "18/best[height<=720][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]";
