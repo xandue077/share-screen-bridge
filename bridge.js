@@ -1046,7 +1046,7 @@ const server = http.createServer(async (req, res) => {
       } catch (error) {
         return send(res, 502, {
           ok: false,
-          error: String(error?.stderr ?? error?.message ?? error).slice(0, 3000),
+          error: String(error?.stderr ?? error?.message ?? error).slice(0, 20000),
         });
       }
     }
